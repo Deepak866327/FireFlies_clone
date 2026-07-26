@@ -6,6 +6,15 @@ from sqlalchemy.orm import sessionmaker
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
 
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    # Ensure the target directory exists so a misconfigured/missing mount (e.g. a
+    # DATABASE_URL pointing at a volume path before the volume is attached) doesn't
+    # crash the app - it falls back to a plain, non-persistent directory instead.
+    db_path = SQLALCHEMY_DATABASE_URL.replace("sqlite:///", "", 1)
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
 connect_args = (
     {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 )
