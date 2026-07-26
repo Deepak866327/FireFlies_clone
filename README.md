@@ -1,174 +1,327 @@
-# Meeting Notes Platform (Fireflies.ai Clone)
+# Meeting Notes — AI-Powered Meeting Intelligence Platform
 
-A transcript-first meeting intelligence platform built as a 24-hour take-home assignment. Users create meetings by pasting or uploading a transcript, and the backend generates a summary, topics, and action items from that transcript — no audio recording or external AI API required.
+A full-stack meeting notes platform inspired by [Fireflies.ai](https://fireflies.ai). Paste or upload a meeting transcript and get an automatically generated summary, topic list, and action items — then search the transcript, chat with an AI about the meeting, and export everything to PDF, Markdown, or plain text.
 
-## Project Overview
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)](https://platform.openai.com/)
+[![Gemini](https://img.shields.io/badge/Google_Gemini-8E75B2?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com/)
+[![Railway](https://img.shields.io/badge/Deployed_on-Railway-0B0D0E?logo=railway&logoColor=white)](https://railway.app/)
 
-The product mirrors the core loop of Fireflies.ai: a dashboard of past meetings, a detail view with transcript + AI-style notes, and a way to create new meetings from transcript text. Since building real-time audio transcription in 24 hours is unrealistic, the assignment is scoped around **transcripts as the source of truth** — audio upload is treated as an optional, unimplemented enhancement rather than the core workflow.
+---
+
+## Overview
+
+**Meeting Notes** turns a raw meeting transcript into a structured, searchable record. Instead of requiring live audio capture or a meeting bot, the platform is **transcript-first**: paste text or upload a `.txt`/`.json` transcript, and the backend automatically derives a summary, topics, and action items, then stores everything in a relational database for browsing, searching, editing, and exporting later.
+
+On top of the automatic notes, an optional **Ask AI** panel lets you have a real conversation with either **OpenAI GPT** or **Google Gemini** about a specific meeting — answers are grounded strictly in that meeting's own content.
+
+This is a personal/portfolio project built to demonstrate a complete, production-shaped full-stack application: a typed React frontend, a clean FastAPI backend with a proper service layer, a normalized relational schema, real third-party AI integration, and a working cloud deployment.
+
+---
 
 ## Features
 
-- **Meeting dashboard** — list of meetings sorted by recency, with search across titles and transcript content.
-- **Meeting creation** — paste a transcript directly or upload a `.txt`/`.json` transcript file, along with a title and participant list.
-- **Automatic notes generation** — summary, topics, and action items are derived from the transcript using deterministic, rule-based logic (no external LLM calls, no API keys required).
-- **Meeting detail view** — transcript (searchable, clickable lines), summary, topic tags, and an action item checklist.
-- **Action item tracking** — mark action items complete/incomplete.
-- **Seeded demo data** — five realistic meetings with full transcripts load automatically on first run, so the app is populated immediately.
+### Meetings
+- **Meeting dashboard** with search, date filtering, and sorting
+- **Search** by meeting title, participant name, or transcript content
+- **Date filters** — Today, Last 7 Days, Last 30 Days, This Year, All Meetings
+- **Sorting** — Newest First, Oldest First, A → Z, Z → A
+- **Full CRUD** — create, view, edit (title & participants), and delete meetings
+- **Transcript upload** — paste text directly or upload a `.txt`/`.json` transcript file
+
+### Automatic meeting notes
+- **Meeting summary** — generated automatically from the transcript on creation
+- **Topic extraction** — key topics surfaced as tags
+- **Action items** — extracted automatically, with an interactive checklist to mark them complete
+- **Transcript view** — speaker-attributed, timestamped, with in-transcript search and highlighting
+
+> These automatic notes use deterministic, rule-based text analysis (word frequency, phrase matching) — not a language model — so the app works fully offline with no API keys. See [Known Limitations](#-known-limitations).
+
+### Ask AI
+- **Chat with a meeting** using either **OpenAI GPT** or **Google Gemini** — switch providers per question
+- Answers are grounded only in that meeting's title, summary, topics, action items, and transcript
+- Short-term conversation memory (last 5 exchanges) within the page session — nothing is stored permanently
+
+### Export
+- **PDF export** (via ReportLab)
+- **Markdown export** (`.md`)
+- **Plain text export** (`.txt`)
+
+Each format includes the meeting title, date, participants, summary, topics, action items, and full timestamped transcript.
+
+### Other
+- **Toast notifications** for create/update/delete/error feedback
+- **Audio player UI** — present in the interface; there is currently no audio upload/transcription pipeline behind it (see [Known Limitations](#-known-limitations))
+- **Live Meeting Bot**, **Speech-to-Text**, **Integrations**, **Team Collaboration**, **Profile**, and **Settings** — UI placeholders marked "Coming Soon", included to show the intended product surface. No backend logic sits behind them today.
+
+---
 
 ## Tech Stack
 
-**Frontend:** Next.js (App Router), TypeScript, TailwindCSS
-**Backend:** FastAPI, SQLAlchemy (sync), SQLite, Pydantic
+| Layer | Technology |
+|---|---|
+| Frontend framework | Next.js 16 (App Router) |
+| Frontend language | TypeScript |
+| Styling | Tailwind CSS |
+| Backend framework | FastAPI |
+| Backend language | Python |
+| ORM | SQLAlchemy (sync) |
+| Validation / schemas | Pydantic v2 |
+| Database | SQLite |
+| PDF generation | ReportLab |
+| AI providers | OpenAI (Chat Completions API) & Google Gemini API, called directly over HTTPS via `httpx` — no LangChain, no vector store |
+| Frontend hosting | Vercel |
+| Backend hosting | Railway |
 
-No ORM abstraction layers, no state management library, no CSS-in-JS, no design-system tooling (e.g. class-variance-authority) — kept intentionally minimal for the assignment's time box.
+---
+
+## Architecture
+
+The project deliberately avoids heavyweight patterns (no repository layer, no dependency-injection framework, no CQRS) in favor of a flat, readable structure on both sides.
+
+**Backend** — one direction of dependency, no circular logic:
+
+```
+Router  →  Service  →  SQLAlchemy Model  →  SQLite
+```
+
+Routers handle HTTP concerns only (parsing, status codes, 404s). All business logic — transcript parsing, note generation, AI prompting, PDF/Markdown/text rendering — lives in `services/`. The AI integration uses a small **provider/factory pattern** (`services/llm/`) so OpenAI and Gemini share one interface and routers never branch on which provider was chosen.
+
+**Frontend** — pages own data-fetching, components stay presentational:
+
+```
+Page  →  Component  →  lib/api.ts  →  Backend API
+```
+
+`lib/api.ts` is the single place that calls `fetch()` — no component talks to the network directly.
+
+---
 
 ## Folder Structure
 
 ```
-backend/
-├── main.py                  # FastAPI app, CORS, router include, startup (create tables + seed)
-├── database.py               # engine, SessionLocal, Base, get_db
-├── seed.py                   # seeds 5 demo meetings with full transcripts
-├── requirements.txt
-├── models/                   # SQLAlchemy ORM models, one file per entity
-│   ├── meeting.py
-│   ├── transcript.py
-│   ├── action_item.py
-│   └── topic.py
-├── schemas/                  # Pydantic request/response models, one file per entity
-│   ├── meeting.py
-│   ├── transcript.py
-│   ├── action_item.py
-│   └── topic.py
-├── routers/
-│   └── meetings.py           # all meeting HTTP routes
-└── services/
-    └── meeting_service.py    # transcript parsing + mock summary/topic/action-item generation
-
-frontend/
-├── app/
-│   ├── layout.tsx             # root layout, global styles, responsive container
-│   ├── page.tsx                # dashboard: search, sort, meeting list
-│   ├── upload/page.tsx         # create-meeting form
-│   └── meetings/[id]/page.tsx  # meeting detail: transcript + summary + action items
-├── components/
-│   ├── MeetingCard.tsx
-│   ├── TranscriptView.tsx
-│   ├── SummaryPanel.tsx
-│   ├── UploadForm.tsx
-│   └── ui/                     # lightweight primitives: Button, Card, Input, Textarea, Modal
-└── lib/
-    ├── types.ts                 # TypeScript interfaces mirroring backend schemas
-    └── api.ts                   # fetch wrapper + one function per backend endpoint
+scalarAI/
+├── backend/
+│   ├── main.py                     # FastAPI app, CORS, router registration, startup hook
+│   ├── database.py                  # SQLAlchemy engine/session (SQLite by default, DATABASE_URL-configurable)
+│   ├── seed.py                       # seeds 5 demo meetings on first run
+│   ├── requirements.txt
+│   ├── Procfile                      # Railway start command
+│   ├── models/                       # SQLAlchemy models (Meeting, TranscriptSegment, ActionItem, Topic)
+│   ├── schemas/                      # Pydantic request/response models, incl. chat schemas
+│   ├── routers/
+│   │   ├── meetings.py                # meeting CRUD + transcript search
+│   │   ├── action_items.py            # action item updates
+│   │   ├── export.py                  # PDF / Markdown / TXT export
+│   │   └── chat.py                    # Ask AI endpoint
+│   └── services/
+│       ├── meeting_service.py         # transcript parsing + summary/topic/action-item generation
+│       ├── export_service.py          # export document builders
+│       ├── chat_service.py            # meeting-context prompt building + history trimming
+│       └── llm/                       # provider-based AI architecture
+│           ├── base.py                 # provider interface + typed errors
+│           ├── factory.py              # provider name → provider instance
+│           ├── openai_provider.py
+│           └── gemini_provider.py
+│
+└── frontend/
+    ├── app/
+    │   ├── layout.tsx                  # root layout, navbar, toast provider
+    │   ├── page.tsx                     # dashboard
+    │   ├── upload/page.tsx               # create meeting
+    │   ├── meetings/[id]/page.tsx        # meeting detail (transcript, summary, export, Ask AI)
+    │   ├── integrations/page.tsx         # placeholder
+    │   ├── team/page.tsx                 # placeholder
+    │   ├── profile/page.tsx              # placeholder (mock user, no auth)
+    │   └── settings/page.tsx             # placeholder
+    ├── components/
+    │   ├── TranscriptView.tsx, SummaryPanel.tsx, AudioPlayer.tsx
+    │   ├── ExportMenu.tsx, AskAI.tsx
+    │   ├── MeetingCard.tsx, MeetingList.tsx, SearchBar.tsx, DateFilter.tsx, SortDropdown.tsx
+    │   └── ui/                          # Button, Card, Input, Modal, Textarea, Toast
+    └── lib/
+        ├── types.ts                     # TypeScript types mirroring backend schemas
+        └── api.ts                       # typed fetch client
 ```
 
-## Architecture Overview
+---
 
-Both sides use a flat, conventional layering with no enterprise patterns (no Repository pattern, no DDD, no CQRS, no dependency-injection framework):
+## Installation
 
-- **Backend:** `routers` handle HTTP concerns (parsing requests, status codes, 404s) and delegate all business logic — transcript parsing, summary/topic/action-item generation, persistence — to `services/meeting_service.py`. SQLAlchemy models are used directly in routers/services; there's no repository layer between them.
-- **Frontend:** App Router pages fetch data (server components where possible, client components where interactivity is needed) and compose small, single-purpose components. `lib/api.ts` is the only place that talks to the backend — components never call `fetch` directly.
+### Prerequisites
 
-This keeps the codebase easy to navigate end-to-end in an interview walkthrough: HTTP route → service function → ORM model, and page → component → `lib/api.ts` call.
+- **Node.js 20+**
+- **Python 3.11+**
+- (Optional) An [OpenAI API key](https://platform.openai.com/api-keys) and/or [Google Gemini API key](https://ai.google.dev/) if you want the Ask AI feature to work — the rest of the app runs fully without them.
 
-## Database Schema
-
-Four tables, all hanging off `Meeting` as the root entity:
-
-| Table | Key Fields | Relationship |
-|---|---|---|
-| `meetings` | title, participants, created_at, summary, audio_url | — |
-| `transcript_segments` | meeting_id (FK), order_index, speaker, start_time, text | Meeting 1—* Segment |
-| `action_items` | meeting_id (FK), segment_id (FK, nullable), text, owner, is_done | Meeting 1—* ActionItem |
-| `topics` | meeting_id (FK), label | Meeting 1—* Topic |
-
-```mermaid
-erDiagram
-    MEETING ||--o{ TRANSCRIPT_SEGMENT : contains
-    MEETING ||--o{ ACTION_ITEM : has
-    MEETING ||--o{ TOPIC : has
-    TRANSCRIPT_SEGMENT |o--o{ ACTION_ITEM : "referenced by (optional)"
-```
-
-No `User`, `Speaker`, or `Summary` tables — speakers are plain text labels on segments, and a meeting's summary is a single `Text` column rather than a versioned/normalized entity. Transcript search runs as a `LIKE` query over `transcript_segments.text`, which is sufficient at this dataset size; SQLite FTS5 would be the natural upgrade if search became a real bottleneck.
-
-## API Endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/meetings` | List meetings, optional `search` query param, sorted by recency |
-| GET | `/meetings/{id}` | Full meeting detail (transcript, summary, topics, action items) |
-| POST | `/meetings` | Create a meeting from pasted text or an uploaded `.txt`/`.json` file (`multipart/form-data`) |
-| PUT | `/meetings/{id}` | Update meeting title/participants |
-| DELETE | `/meetings/{id}` | Delete a meeting (cascades to segments, action items, topics) |
-| PATCH | `/action-items/{id}` | Update an action item, primarily toggling `is_done` — **designed, not yet implemented** |
-| GET | `/meetings/{id}/transcript` | Transcript segments only, lighter payload for the transcript pane — **designed, not yet implemented** |
-
-Full request/response contracts are documented in the API specification produced during design (not checked into this repo as a separate file).
-
-## Setup Instructions
-
-**Prerequisites:** Node.js 18+, Python 3.11+
+### Clone the repository
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/<your-username>/<your-repo>.git
 cd scalarAI
 ```
 
-## Running Backend
+---
+
+## Backend Setup
 
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate        # Windows
+
+# Windows
+venv\Scripts\activate
+# macOS/Linux
+source venv/bin/activate
+
 pip install -r requirements.txt
+```
+
+Create `backend/.env` (see [Environment Variables](#-environment-variables) below — every value is optional for local development):
+
+```bash
+cp .env.example .env
+```
+
+Run the API:
+
+```bash
 uvicorn main:app --reload
 ```
 
-The API runs at `http://localhost:8000`. On startup, tables are created automatically and the database is seeded with 5 demo meetings if it's empty — no manual migration or seed step required.
+The API is now available at `http://localhost:8000`, with interactive docs at `http://localhost:8000/docs`. Tables are created and the database is seeded with 5 demo meetings automatically on first startup — no manual migration step required.
 
-## Running Frontend
+---
+
+## Frontend Setup
 
 ```bash
 cd frontend
 npm install
-```
-
-Create `frontend/.env.local`:
-```
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-```bash
+cp .env.local.example .env.local
 npm run dev
 ```
 
-The app runs at `http://localhost:3000`. Start the backend first so the dashboard has data to load.
+The app is now available at `http://localhost:3000`. Start the backend first so the dashboard has data to load.
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | No | — | Enables the OpenAI option in Ask AI. Without it, selecting OpenAI returns a friendly "not configured" error. |
+| `GEMINI_API_KEY` | No | — | Enables the Google Gemini option in Ask AI. Same behavior as above if unset. |
+| `ALLOWED_ORIGINS` | No | `http://localhost:3000` | Comma-separated list of origins allowed to call the API (CORS). Set this to your deployed frontend URL in production. |
+| `DATABASE_URL` | No | `sqlite:///./app.db` | SQLAlchemy connection string. Swappable to Postgres or a persistent-volume SQLite path without other code changes. |
+
+### Frontend (`frontend/.env.local`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `NEXT_PUBLIC_API_URL` | Yes | `http://127.0.0.1:8000` (fallback in code) | Base URL of the backend API. |
+
+---
+
+## Running Locally
+
+1. Start the backend: `cd backend && uvicorn main:app --reload`
+2. Start the frontend: `cd frontend && npm run dev`
+3. Open `http://localhost:3000`
+
+---
+
+## Building for Production
+
+**Frontend:**
+
+```bash
+cd frontend
+npm run build
+npm run start
+```
+
+**Backend:** there is no separate build step — FastAPI runs the same way in production as in development, just without `--reload` and bound to the host/port your platform provides:
+
+```bash
+cd backend
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+---
 
 ## Deployment
 
-Not deployed for this assignment — designed to be run locally for demo/review. If this went to production:
+The app deploys as two independent services: **frontend on Vercel**, **backend on Railway**.
 
-- **Frontend** would deploy to Vercel with `NEXT_PUBLIC_API_URL` pointed at the hosted API.
-- **Backend** would deploy to a small Render/Railway instance. SQLite's single-file nature works for a local demo but doesn't survive ephemeral/serverless filesystems or multiple instances — swapping `database.py`'s connection string to Postgres would be a drop-in change since no raw SQL or SQLite-specific features are used elsewhere.
+**Backend (Railway):**
+1. Create a new Railway project from this GitHub repository, with **Root Directory** set to `backend`.
+2. Railway auto-detects Python via `requirements.txt` and uses the included `Procfile` as the start command.
+3. Set the environment variables from the [Backend table](#backend-backendenv) above (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ALLOWED_ORIGINS`, `DATABASE_URL`).
+4. Generate a public domain for the service.
 
-## Trade-offs
+**Frontend (Vercel):**
+1. Import this repository into Vercel with **Root Directory** set to `frontend`.
+2. Set `NEXT_PUBLIC_API_URL` to your Railway backend's public URL.
+3. Deploy.
 
-Deliberate simplifications made to fit a 24-hour scope:
+**Finally**, update `ALLOWED_ORIGINS` on Railway to include your real Vercel domain so the browser isn't blocked by CORS.
 
-- **Mocked AI, not a real LLM call.** `generate_summary`, `extract_topics`, and `extract_action_items` use deterministic, rule-based logic (keyword frequency, phrase matching) instead of calling OpenAI/Anthropic. This keeps the app runnable offline, free, and demo-reliable, at the cost of lower-quality output than a real model would produce.
-- **SQLite over Postgres.** Zero setup, file-based, ships with Python — the right call for a take-home, not for concurrent production traffic.
-- **No auth.** Single-tenant, no login — out of scope for what's being evaluated here.
-- **`LIKE`-based search**, not full-text search — fine at seed-data scale (5 meetings), would need FTS5 or a real search index at real scale.
-- **Action items are nested under meetings**, not a fully independent REST resource, since they're never accessed outside the context of a meeting in this UI.
-- **A few designed pieces are not yet implemented:** the `PATCH /action-items/{id}` and `GET /meetings/{id}/transcript` endpoints are specified in the API design but not wired into `routers/meetings.py`; a handful of small frontend components referenced by pages (`Navbar`, `SearchBar`, `SortDropdown`, `MeetingList`, `EmptyState`, `LoadingState`, `AudioPlayerPlaceholder`) and the Next.js project scaffolding (`package.json`, `tailwind.config.ts`, `globals.css`) are designed but pending — this repo reflects an in-progress, incrementally-reviewed build rather than a finished submission.
+A full, detailed step-by-step walkthrough (including SQLite persistence options and troubleshooting) is in [`deploy.md`](./deploy.md).
+
+---
+
+## API Overview
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/meetings` | List meetings — supports `search`, `date_filter`, `sort` query params |
+| `GET` | `/meetings/{id}` | Full meeting detail |
+| `GET` | `/meetings/{id}/transcript` | Transcript segments only, with optional `search` |
+| `POST` | `/meetings` | Create a meeting from pasted text or an uploaded `.txt`/`.json` file |
+| `PUT` | `/meetings/{id}` | Update a meeting's title/participants |
+| `DELETE` | `/meetings/{id}` | Delete a meeting (cascades to its segments, action items, and topics) |
+| `PATCH` | `/action-items/{id}` | Update an action item (e.g. toggle completion) |
+| `GET` | `/meetings/{id}/export?format=pdf\|md\|txt` | Download the meeting as a file |
+| `POST` | `/meetings/{id}/chat` | Ask AI a question about the meeting (`{ provider, question }`) |
+
+Interactive API documentation is auto-generated by FastAPI at `/docs`.
+
+---
+
+## Known Limitations
+
+Being upfront about what this project does **not** do:
+
+- **Automatic summaries/topics/action items are rule-based, not AI-generated.** They use keyword frequency and phrase matching, not a language model. (The separate **Ask AI** chat feature does use real LLMs.)
+- **No audio or video transcription.** The app is transcript-first by design; the audio player UI exists but nothing currently populates it with real audio.
+- **SQLite is file-based.** On platforms with an ephemeral filesystem (like a default Railway deploy without a persistent volume), data resets on redeploy unless `DATABASE_URL` points at persistent storage.
+- **No authentication.** The app assumes a single demo user; Profile, Settings, Integrations, and Team pages are UI placeholders with no backend behind them.
+- **Search is basic SQL pattern matching**, not a full-text search engine.
+- **No automated test suite** yet.
+- **Chat history is not persisted** — it lives only in the browser tab for the current session, by design.
+
+---
 
 ## Future Improvements
 
-- Real transcription via Whisper/AssemblyAI for the optional audio-upload path.
-- Real LLM-based summarization and action-item extraction, with the current rule-based functions kept as a free fallback.
-- SQLite FTS5 (or Postgres full-text search) for transcript search at scale.
-- Pagination on `GET /meetings` once meeting counts grow past a single page.
-- Basic auth/multi-tenancy if this became a real multi-user product.
-- Automated tests (backend: pytest against the service functions; frontend: component tests for the transcript/action-item interactions).
-- Speaker diarization improvements — real audio would need actual voice separation instead of relying on `"Speaker: text"` line prefixes.
+- Real audio/video upload with transcription (e.g. Whisper)
+- Optional LLM-based summary/topic/action-item generation as an alternative to the rule-based engine
+- Full-text search (SQLite FTS5 or a dedicated search index)
+- Authentication and multi-user workspaces
+- Real integrations (calendar, CRM, conferencing platforms)
+- Automated backend and frontend test suites
+- Pagination for large meeting libraries
+
+---
+
+
+
